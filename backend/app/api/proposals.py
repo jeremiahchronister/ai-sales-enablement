@@ -23,14 +23,11 @@ class ProposalRequest(BaseModel):
 class Proposal(BaseModel):
     id: int
     lead_id: int
-    company_name: str
     title: str
-    executive_summary: str
-    solution_overview: str
-    pricing: dict
-    timeline: str
-    next_steps: str
-    generated_at: str
+    content: str  # Combined executive_summary + solution_overview
+    deal_size: int
+    contract_term: str
+    created_at: str
 
 
 # In-memory storage
@@ -61,7 +58,7 @@ async def generate_proposal(request: ProposalRequest):
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-3-5-sonnet-20240620",
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -69,22 +66,16 @@ async def generate_proposal(request: ProposalRequest):
         content = message.content[0].text
 
         # Create proposal object
+        from datetime import datetime
         new_id = max([p.id for p in proposals_db], default=0) + 1
         proposal = Proposal(
             id=new_id,
             lead_id=request.lead_id,
-            company_name=f"Lead #{request.lead_id}",
             title=f"{request.product_type} Solution Proposal",
-            executive_summary=content[:300],  # First 300 chars
-            solution_overview=content[300:800] if len(content) > 300 else content,
-            pricing={
-                "base_price": request.deal_size,
-                "term": request.contract_term,
-                "monthly": request.deal_size // 12 if request.contract_term == "Annual" else request.deal_size
-            },
-            timeline="90-day implementation",
-            next_steps="Schedule discovery call to refine requirements",
-            generated_at="2024-11-07"
+            content=content,
+            deal_size=request.deal_size,
+            contract_term=request.contract_term,
+            created_at=datetime.now().strftime("%Y-%m-%d")
         )
 
         proposals_db.append(proposal)
@@ -92,22 +83,41 @@ async def generate_proposal(request: ProposalRequest):
 
     except Exception as e:
         # Fallback proposal if API fails
+        from datetime import datetime
         new_id = max([p.id for p in proposals_db], default=0) + 1
+
+        fallback_content = f"""# {request.product_type} Solution Proposal
+
+## Executive Summary
+Comprehensive {request.product_type} solution designed to streamline your operations and drive measurable ROI. Our platform integrates seamlessly with your existing systems.
+
+## Solution Overview
+Our solution addresses your key challenges through AI-powered automation, intuitive workflows, and real-time analytics. Expected outcomes: 35% efficiency gain, 22% cost reduction, 90-day payback period.
+
+## Pricing
+- Deal Size: ${request.deal_size:,}
+- Contract Term: {request.contract_term}
+- Monthly: ${request.deal_size // 12 if request.contract_term == 'Annual' else request.deal_size:,}
+
+## Timeline
+90-day implementation with dedicated onboarding
+
+## Next Steps
+1. Schedule technical deep-dive
+2. Executive business review
+3. Contract finalization
+
+Note: API error occurred - {str(e)[:100]}
+"""
+
         proposal = Proposal(
             id=new_id,
             lead_id=request.lead_id,
-            company_name=f"Lead #{request.lead_id}",
             title=f"{request.product_type} Solution Proposal",
-            executive_summary=f"Comprehensive {request.product_type} solution designed to streamline your operations and drive measurable ROI. Our platform integrates seamlessly with your existing systems.",
-            solution_overview="Our solution addresses your key challenges through AI-powered automation, intuitive workflows, and real-time analytics. Expected outcomes: 35% efficiency gain, 22% cost reduction, 90-day payback period.",
-            pricing={
-                "base_price": request.deal_size,
-                "term": request.contract_term,
-                "monthly": request.deal_size // 12 if request.contract_term == "Annual" else request.deal_size
-            },
-            timeline="90-day implementation with dedicated onboarding",
-            next_steps="Schedule technical deep-dive and executive business review",
-            generated_at="2024-11-07"
+            content=fallback_content,
+            deal_size=request.deal_size,
+            contract_term=request.contract_term,
+            created_at=datetime.now().strftime("%Y-%m-%d")
         )
 
         proposals_db.append(proposal)

@@ -18,11 +18,9 @@ class LeadCreate(BaseModel):
     company_name: str
     industry: str
     company_size: str  # "1-10", "11-50", "51-200", "201-1000", "1000+"
-    annual_revenue: Optional[str] = None
-    pain_points: str
-    budget_signals: str  # "Low", "Medium", "High"
-    decision_maker_contact: bool
-    timeline: str  # "Immediate", "1-3 months", "3-6 months", "6+ months"
+    contact_name: str
+    contact_email: str
+    contact_phone: str
 
 
 class Lead(BaseModel):
@@ -30,29 +28,42 @@ class Lead(BaseModel):
     company_name: str
     industry: str
     company_size: str
+    contact_name: str
+    contact_email: str
+    contact_phone: str
     score: Optional[int] = None
     score_breakdown: Optional[dict] = None
     qualification_status: Optional[str] = "Unscored"  # "Unscored", "Hot", "Warm", "Cold"
 
 
+class ScoreBreakdown(BaseModel):
+    budget: int  # 0-25
+    authority: int  # 0-25
+    need: int  # 0-30
+    timeline: int  # 0-20
+
+
 class LeadScore(BaseModel):
     score: int  # 0-100
-    qualification_status: str
-    score_breakdown: dict
+    score_breakdown: ScoreBreakdown
+    recommendation: str
     reasoning: str
 
 
 # In-memory storage (replace with database in production)
 leads_db: List[Lead] = [
-    Lead(id=1, company_name="Acme Corp", industry="SaaS", company_size="51-200", score=85,
-         qualification_status="Hot",
-         score_breakdown={"fit": 30, "pain": 25, "budget": 20, "timeline": 10}),
-    Lead(id=2, company_name="TechStart Inc", industry="E-commerce", company_size="11-50", score=62,
-         qualification_status="Warm",
-         score_breakdown={"fit": 20, "pain": 18, "budget": 14, "timeline": 10}),
-    Lead(id=3, company_name="Global Industries", industry="Manufacturing", company_size="1000+", score=42,
-         qualification_status="Cold",
-         score_breakdown={"fit": 15, "pain": 10, "budget": 10, "timeline": 7}),
+    Lead(id=1, company_name="Acme Corp", industry="SaaS", company_size="51-200",
+         contact_name="John Smith", contact_email="john@acmecorp.com", contact_phone="555-0101",
+         score=85, qualification_status="Hot",
+         score_breakdown={"budget": 25, "authority": 25, "need": 25, "timeline": 10}),
+    Lead(id=2, company_name="TechStart Inc", industry="E-commerce", company_size="11-50",
+         contact_name="Sarah Johnson", contact_email="sarah@techstart.com", contact_phone="555-0102",
+         score=62, qualification_status="Warm",
+         score_breakdown={"budget": 18, "authority": 18, "need": 16, "timeline": 10}),
+    Lead(id=3, company_name="Global Industries", industry="Manufacturing", company_size="1000+",
+         contact_name="Mike Williams", contact_email="mike@globalind.com", contact_phone="555-0103",
+         score=42, qualification_status="Cold",
+         score_breakdown={"budget": 12, "authority": 10, "need": 13, "timeline": 7}),
 ]
 
 
@@ -70,7 +81,10 @@ async def create_lead(lead: LeadCreate):
         id=new_id,
         company_name=lead.company_name,
         industry=lead.industry,
-        company_size=lead.company_size
+        company_size=lead.company_size,
+        contact_name=lead.contact_name,
+        contact_email=lead.contact_email,
+        contact_phone=lead.contact_phone
     )
     leads_db.append(new_lead)
     return new_lead
@@ -93,48 +107,70 @@ async def score_lead(lead_id: int):
     - Industry: {lead.industry}
     - Company Size: {lead.company_size}
 
-    Provide a JSON response with:
+    Use BANT (Budget, Authority, Need, Timeline) framework. Provide a JSON response with:
     {{
         "score": <0-100>,
-        "qualification_status": "Hot|Warm|Cold",
         "score_breakdown": {{
-            "fit": <0-30 points for ICP fit>,
-            "pain": <0-25 points for pain intensity>,
-            "budget": <0-25 points for budget signals>,
+            "budget": <0-25 points for budget availability>,
+            "authority": <0-25 points for decision-maker access>,
+            "need": <0-30 points for solution need/pain>,
             "timeline": <0-20 points for buying timeline>
         }},
-        "reasoning": "<brief explanation>"
+        "recommendation": "High Priority|Medium Priority|Low Priority",
+        "reasoning": "<brief 2-3 sentence explanation>"
     }}
 
     Scoring Guide:
-    - Hot (75-100): Strong fit, clear pain, budget confirmed, buying soon
-    - Warm (50-74): Good fit, some pain, budget likely, 3-6 month timeline
-    - Cold (<50): Poor fit or missing key qualification criteria
+    - High Priority (75-100): Strong budget, decision-maker access, clear need, buying soon
+    - Medium Priority (50-74): Some budget, stakeholder access, moderate need, 3-6 month timeline
+    - Low Priority (<50): Limited budget, no decision-maker, weak need, or long timeline
     """
 
     try:
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-3-sonnet-20240229",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}]
         )
 
-        # Parse response (simplified - in production, use structured extraction)
+        # Parse Claude's JSON response
         response_text = message.content[0].text
 
-        # Simple scoring logic for demo (in production, parse Claude's JSON)
-        score = 75  # Example score
+        # Extract JSON from response (may be wrapped in markdown code blocks)
+        import json
+        import re
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Try to find JSON object directly
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            json_str = json_match.group(0) if json_match else '{}'
+
+        try:
+            parsed = json.loads(json_str)
+            score = parsed.get("score", 50)
+            breakdown = parsed.get("score_breakdown", {})
+            recommendation = parsed.get("recommendation", "Medium Priority")
+            reasoning = parsed.get("reasoning", response_text[:200])
+        except:
+            # Fallback if parsing fails
+            score = 50
+            breakdown = {"budget": 15, "authority": 12, "need": 15, "timeline": 8}
+            recommendation = "Medium Priority"
+            reasoning = "Unable to parse AI response. Manual review recommended."
+
         result = LeadScore(
             score=score,
-            qualification_status="Hot" if score >= 75 else "Warm" if score >= 50 else "Cold",
-            score_breakdown={"fit": 25, "pain": 20, "budget": 20, "timeline": 10},
-            reasoning=response_text
+            score_breakdown=ScoreBreakdown(**breakdown),
+            recommendation=recommendation,
+            reasoning=reasoning
         )
 
         # Update lead in database
         lead.score = score
-        lead.score_breakdown = result.score_breakdown
-        lead.qualification_status = result.qualification_status
+        lead.score_breakdown = breakdown
+        lead.qualification_status = "Hot" if score >= 75 else "Warm" if score >= 50 else "Cold"
 
         return result
 
@@ -142,8 +178,8 @@ async def score_lead(lead_id: int):
         # Fallback scoring if API fails
         return LeadScore(
             score=65,
-            qualification_status="Warm",
-            score_breakdown={"fit": 20, "pain": 18, "budget": 17, "timeline": 10},
+            score_breakdown=ScoreBreakdown(budget=17, authority=18, need=20, timeline=10),
+            recommendation="Medium Priority",
             reasoning=f"Scored based on company size ({lead.company_size}) and industry ({lead.industry}). API error: {str(e)}"
         )
 

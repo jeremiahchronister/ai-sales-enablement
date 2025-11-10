@@ -118,7 +118,7 @@ const LeadScoring = () => {
           </div>
         </div>
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="text-sm text-gray-600 mb-1">High Quality (>70)</div>
+          <div className="text-sm text-gray-600 mb-1">High Quality ({'>'} 70)</div>
           <div className="text-3xl font-bold text-blue-600">
             {leads.filter(l => l.score && l.score >= 70).length}
           </div>

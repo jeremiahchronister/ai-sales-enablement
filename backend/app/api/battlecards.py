@@ -17,6 +17,7 @@ class BattleCard(BaseModel):
     pricing_comparison: str
     key_differentiators: List[str]
     objection_handling: dict
+    last_updated: str
 
 
 # Pre-built battle cards
@@ -31,7 +32,8 @@ battlecards_db: List[BattleCard] = [
         objection_handling={
             "But Salesforce is industry standard": "True, but are you using 80% of features you're paying for? Our customers save $100K/year switching to our focused solution.",
             "Integration concerns": "We integrate with Salesforce APIs if needed - best of both worlds."
-        }
+        },
+        last_updated="2024-11-01"
     ),
     BattleCard(
         id=2,
@@ -43,7 +45,8 @@ battlecards_db: List[BattleCard] = [
         objection_handling={
             "HubSpot has full CRM": "We integrate with HubSpot CRM - use best tool for each job. We're specialists in AI sales enablement.",
             "Free tier attractive": "Free tier lacks AI features. Compare our $50/user to their $100 Sales Pro tier."
-        }
+        },
+        last_updated="2024-10-28"
     ),
     BattleCard(
         id=3,
@@ -55,7 +58,8 @@ battlecards_db: List[BattleCard] = [
         objection_handling={
             "Gong is proven in enterprise": "For 1000+ seat enterprises yes. For 50-500 seats, we deliver 90% of value at 50% cost.",
             "Revenue intelligence focus": "We cover revenue intelligence PLUS lead scoring, proposals, and battle cards in one platform."
-        }
+        },
+        last_updated="2024-11-05"
     ),
 ]
 
